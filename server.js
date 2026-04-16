@@ -646,11 +646,9 @@ io.on('connection', (socket) => {
 
     // ========== WebRTC СИГНАЛЫ ДЛЯ ЗВОНКОВ ==========
 
-// Исходящий звонок
-socket.on('call_user', (data) => {
-    console.log(`📞 Call from ${data.fromName} (${data.from}) to ${data.to}`);
+socket.on('call_user', async (data) => {
+    console.log(`📞 Call from ${data.fromName} to ${data.to}`);
     
-    // Проверяем, онлайн ли получатель
     let receiverOnline = false;
     for (let [sockId, uid] of activeSockets.entries()) {
         if (uid === data.to) {
@@ -660,18 +658,35 @@ socket.on('call_user', (data) => {
     }
     
     if (receiverOnline) {
-        // Отправляем входящий звонок получателю
         io.to(`user_${data.to}`).emit('incoming_call', {
             from: data.from,
             fromName: data.fromName,
             callType: data.callType,
             offer: data.offer
         });
-        console.log(`✅ Incoming call sent to user ${data.to}`);
     } else {
-        // Получатель офлайн
         socket.emit('call_failed', { reason: 'user_offline' });
-        console.log(`❌ User ${data.to} is offline`);
+    }
+    
+    // Отправляем Push уведомление в любом случае
+    const subscription = pushSubscriptions.get(String(data.to));
+    if (subscription) {
+        try {
+            await webpush.sendNotification(subscription, JSON.stringify({
+                title: '📞 Входящий звонок',
+                body: `${data.fromName} звонит вам (${data.callType === 'video' ? 'видео' : 'аудио'})`,
+                callerId: data.from,
+                callerName: data.fromName,
+                callType: data.callType
+            }));
+            console.log(`📲 Push sent to user ${data.to}`);
+        } catch (error) {
+            console.error('Push failed:', error);
+            // Удаляем невалидную подписку
+            if (error.statusCode === 410) {
+                pushSubscriptions.delete(String(data.to));
+            }
+        }
     }
 });
 
