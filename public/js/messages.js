@@ -34,43 +34,45 @@ async function openChat(userId, username) {
         }
 
         app.innerHTML = `
-            <div class="chat-screen">
-                <div class="chat-header">
-                    <button class="back-btn" onclick="loadChats()">←</button>
-                    <div class="chat-header-avatar ${userInfo?.status === 'online' ? 'online' : ''}" id="chat-header-avatar-${userId}">
-                    </div>
-                    <div class="chat-header-info">
-                        <div class="chat-header-name" onclick="showMiniProfile(${userId}, '${username}')">${username}</div>
-                        <div class="chat-header-status" id="chat-status">
-                            ${userInfo?.status === 'online' ? 'в сети' : 'был(а) недавно'}
-                        </div>
-                        <div class="typing-indicator" id="typing-indicator" style="display:none;">печатает...</div>
-                    </div>
-                    <div class="chat-menu">
-                        <button class="menu-dots" onclick="toggleChatMenu()">⋮</button>
-                        <div id="chat-menu-dropdown" class="chat-menu-dropdown" style="display:none;">
-                            <div onclick="clearChat(${userId}, '${username}')">🗑️ Очистить чат</div>
-                            <div onclick="deleteChat(${userId}, '${username}')">❌ Удалить чат</div>
-                        </div>
-                    </div>
+    <div class="chat-screen">
+        <div class="chat-header">
+            <button class="back-btn" onclick="loadChats()">←</button>
+            <div class="chat-header-avatar ${userInfo?.status === 'online' ? 'online' : ''}" id="chat-header-avatar-${userId}">
+            </div>
+            <div class="chat-header-info">
+                <div class="chat-header-name" onclick="showMiniProfile(${userId}, '${username}')">${username}</div>
+                <div class="chat-header-status" id="chat-status">
+                    ${userInfo?.status === 'online' ? 'в сети' : 'был(а) недавно'}
                 </div>
-                
-                <div class="messages-container" id="messages-container">
-                    ${messagesHtml}
-                </div>
-                
-                <div class="message-input-container">
-                    <button class="file-btn" onclick="selectFile()" title="Прикрепить файл">📎</button>
-                    <button class="photo-btn" onclick="selectPhoto()">📷</button>
-                    <input type="text" class="message-input" id="message-input" 
-                           placeholder="Сообщение" 
-                           onkeyup="handleTyping(event)" 
-                           onkeypress="if(event.key==='Enter') sendMessage()">
-                    <button class="send-btn" onclick="sendMessage()">➤</button>
+                <div class="typing-indicator" id="typing-indicator" style="display:none;">печатает...</div>
+            </div>
+            <button class="call-audio-btn" onclick="startCall(${userId}, '${username}', 'audio')" title="Аудиозвонок" style="background:transparent;border:none;color:white;font-size:20px;cursor:pointer;width:40px;height:40px;display:flex;align-items:center;justify-content:center;margin-right:5px;">📞</button>
+            <button class="call-video-btn" onclick="startCall(${userId}, '${username}', 'video')" title="Видеозвонок" style="background:transparent;border:none;color:white;font-size:20px;cursor:pointer;width:40px;height:40px;display:flex;align-items:center;justify-content:center;margin-right:5px;">📹</button>
+            <div class="chat-menu">
+                <button class="menu-dots" onclick="toggleChatMenu()">⋮</button>
+                <div id="chat-menu-dropdown" class="chat-menu-dropdown" style="display:none;">
+                    <div onclick="clearChat(${userId}, '${username}')">🗑️ Очистить чат</div>
+                    <div onclick="deleteChat(${userId}, '${username}')">❌ Удалить чат</div>
                 </div>
             </div>
-        `;
-
+        </div>
+        
+        <div class="messages-container" id="messages-container">
+            ${messagesHtml}
+        </div>
+        
+        <div class="message-input-container">
+            <button class="file-btn" onclick="selectFile()" title="Прикрепить файл">📎</button>
+            <button class="photo-btn" onclick="selectPhoto()">📷</button>
+            <input type="text" class="message-input" id="message-input" 
+                   placeholder="Сообщение" 
+                   onkeyup="handleTyping(event)" 
+                   onkeypress="if(event.key==='Enter') sendMessage()">
+            <button class="send-btn" onclick="sendMessage()">➤</button>
+        </div>
+    </div>
+`;
+        
                 // Загружаем аватарку для шапки чата
         const chatAvatar = document.getElementById(`chat-header-avatar-${userId}`);
         if (chatAvatar) {
@@ -389,7 +391,7 @@ function scrollToBottom() {
     }
 }
 
-// Показать мини-профиль
+// Показать мини-профиль (с кнопками звонка)
 async function showMiniProfile(userId, username) {
     try {
         const response = await fetch(`${SERVER_URL}/api/auth/${userId}`);
@@ -430,6 +432,12 @@ async function showMiniProfile(userId, username) {
                 <div class="profile-actions">
                     <button onclick="openChat(${user.id}, '${user.username}'); this.closest('.profile-modal').remove();">
                         💬 Написать
+                    </button>
+                    <button onclick="startCall(${user.id}, '${user.username}', 'audio'); this.closest('.profile-modal').remove();">
+                        📞 Аудио
+                    </button>
+                    <button onclick="startCall(${user.id}, '${user.username}', 'video'); this.closest('.profile-modal').remove();">
+                        📹 Видео
                     </button>
                     <button onclick="this.closest('.profile-modal').remove()">
                         ✕ Закрыть
