@@ -24,6 +24,20 @@ const {
   updateUsername
 } = require('./database');
 
+const webpush = require('web-push');
+
+// ЗАМЕНИ НА СВОИ КЛЮЧИ из шага 2
+const vapidKeys = {
+    publicKey: 'BLqud1G9zuzsDK3RpDOG0ykkWkQcCHgIS2jU6BVI9TxWEwdTvNCmfziTxxcoBrKVCBKQSjyCTy8UKhjcj81E-jo',
+    privateKey: 'IhG2zfdjIxzrCqyAgHLni-gadLxjYkT0qRfQ5Yaf9EI'
+};
+
+webpush.setVapidDetails(
+    'mailto:your-email@example.com',
+    vapidKeys.publicKey,
+    vapidKeys.privateKey
+);
+
 // Константы
 const app = express();
 
