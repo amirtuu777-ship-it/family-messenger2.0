@@ -558,6 +558,69 @@ if (Notification.permission === 'default') {
     Notification.requestPermission();
 }
 
+// ========== SERVICE WORKER ==========
+
+async function registerServiceWorker() {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+        console.warn('Push notifications not supported');
+        return;
+    }
+    
+    try {
+        const registration = await navigator.serviceWorker.register('/sw.js');
+        console.log('✅ SW registered');
+        
+        if (Notification.permission === 'default') {
+            await Notification.requestPermission();
+        }
+        
+        if (Notification.permission === 'granted') {
+            await subscribeToPush(registration);
+        }
+    } catch (error) {
+        console.error('SW registration failed:', error);
+    }
+}
+
+async function subscribeToPush(registration) {
+    try {
+        // ЗАМЕНИ НА СВОЙ ПУБЛИЧНЫЙ КЛЮЧ из шага 2
+        const publicVapidKey = 'ТВОЙ_ПУБЛИЧНЫЙ_КЛЮЧ_СЮДА';
+        
+        const subscription = await registration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(publicVapidKey)
+        });
+        
+        await fetch('/api/push/subscribe', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                userId: currentUser?.id,
+                subscription: subscription
+            })
+        });
+        
+        console.log('✅ Push subscribed');
+    } catch (error) {
+        console.error('Push subscription failed:', error);
+    }
+}
+
+function urlBase64ToUint8Array(base64String) {
+    const padding = '='.repeat((4 - base64String.length % 4) % 4);
+    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const rawData = window.atob(base64);
+    const outputArray = new Uint8Array(rawData.length);
+    for (let i = 0; i < rawData.length; ++i) {
+        outputArray[i] = rawData.charCodeAt(i);
+    }
+    return outputArray;
+}
+
+// Вызвать в init() после успешного входа
+// добавить строку: registerServiceWorker();
+
 // ========== ЗАПУСК ==========
 window.addEventListener('beforeunload', () => {
     if (currentUser && socket) {
