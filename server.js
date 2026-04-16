@@ -51,6 +51,7 @@ app.use(helmet({
 // ========== CORS - РАЗРЕШЁННЫЕ ДОМЕНЫ ==========
 const allowedOrigins = [
     'https://family-messenger-production-e1a8.up.railway.app',
+    'https://family-messenger20-production.up.railway.app',
     'http://localhost:3000',
     'http://localhost:5500',
     'https://shariq-messenger.up.railway.app'
