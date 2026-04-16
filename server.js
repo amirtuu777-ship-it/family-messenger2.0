@@ -644,6 +644,79 @@ io.on('connection', (socket) => {
         }
     });
 
+    // ========== WebRTC СИГНАЛЫ ДЛЯ ЗВОНКОВ ==========
+
+// Исходящий звонок
+socket.on('call_user', (data) => {
+    console.log(`📞 Call from ${data.fromName} (${data.from}) to ${data.to}`);
+    
+    // Проверяем, онлайн ли получатель
+    let receiverOnline = false;
+    for (let [sockId, uid] of activeSockets.entries()) {
+        if (uid === data.to) {
+            receiverOnline = true;
+            break;
+        }
+    }
+    
+    if (receiverOnline) {
+        // Отправляем входящий звонок получателю
+        io.to(`user_${data.to}`).emit('incoming_call', {
+            from: data.from,
+            fromName: data.fromName,
+            callType: data.callType,
+            offer: data.offer
+        });
+        console.log(`✅ Incoming call sent to user ${data.to}`);
+    } else {
+        // Получатель офлайн
+        socket.emit('call_failed', { reason: 'user_offline' });
+        console.log(`❌ User ${data.to} is offline`);
+    }
+});
+
+// Звонок принят
+socket.on('call_accepted', (data) => {
+    console.log(`✅ Call accepted by user, sending answer to ${data.to}`);
+    
+    io.to(`user_${data.to}`).emit('call_accepted', {
+        answer: data.answer
+    });
+});
+
+// Звонок отклонён
+socket.on('call_declined', (data) => {
+    console.log(`❌ Call declined, notifying ${data.to}`);
+    
+    io.to(`user_${data.to}`).emit('call_declined', {
+        from: data.from
+    });
+});
+
+// Абонент занят (уже в звонке)
+socket.on('call_busy', (data) => {
+    io.to(`user_${data.to}`).emit('call_busy');
+});
+
+// Звонок завершён
+socket.on('call_ended', (data) => {
+    console.log(`🔚 Call ended, notifying ${data.to}`);
+    
+    io.to(`user_${data.to}`).emit('call_ended');
+});
+
+// ICE кандидат
+socket.on('ice_candidate', (data) => {
+    io.to(`user_${data.to}`).emit('ice_candidate', {
+        candidate: data.candidate
+    });
+});
+
+// Ошибка звонка (опционально)
+socket.on('call_failed', (data) => {
+    socket.emit('call_failed', data);
+});
+  
     socket.on('disconnect', async () => {
         const userId = activeSockets.get(socket.id);
         console.log(`🔴 Клиент отключен: ${socket.id}, userId: ${userId}`);
