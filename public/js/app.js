@@ -202,6 +202,7 @@ async function login() {
     
     if (response.ok) {
         currentUser = data.user;
+        registerServiceWorker();
         localStorage.setItem('shariq_user', JSON.stringify(currentUser));
         connectSocket();
         loadChats();
