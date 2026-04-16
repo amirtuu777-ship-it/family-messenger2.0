@@ -559,6 +559,18 @@ if (Notification.permission === 'default') {
     Notification.requestPermission();
 }
 
+// ========== ЗАПУСК ==========
+window.addEventListener('beforeunload', () => {
+    if (currentUser && socket) {
+        navigator.sendBeacon(`${SERVER_URL}/api/auth/logout/${currentUser.id}`, '');
+    }
+    if (statusUpdateInterval) {
+        clearInterval(statusUpdateInterval);
+    }
+});
+
+// Запуск приложения
+document.addEventListener('DOMContentLoaded', init);
 // ========== SERVICE WORKER ==========
 
 async function registerServiceWorker() {
@@ -621,16 +633,3 @@ function urlBase64ToUint8Array(base64String) {
 
 // Вызвать в init() после успешного входа
 // добавить строку: registerServiceWorker();
-
-// ========== ЗАПУСК ==========
-window.addEventListener('beforeunload', () => {
-    if (currentUser && socket) {
-        navigator.sendBeacon(`${SERVER_URL}/api/auth/logout/${currentUser.id}`, '');
-    }
-    if (statusUpdateInterval) {
-        clearInterval(statusUpdateInterval);
-    }
-});
-
-// Запуск приложения
-document.addEventListener('DOMContentLoaded', init);
