@@ -573,6 +573,7 @@ initializeDatabase().then(() => {
 
 // Хранилище активных соединений
 const activeSockets = new Map();
+const pushSubscriptions = new Map();
 
 // ========== ОБРАБОТКА КЛИЕНТСКОЙ ЧАСТИ ==========
 app.get('*', (req, res, next) => {
@@ -673,8 +674,9 @@ io.on('connection', (socket) => {
     // ========== WebRTC СИГНАЛЫ ДЛЯ ЗВОНКОВ ==========
 
 socket.on('call_user', async (data) => {
-    console.log(`📞 Call from ${data.fromName} to ${data.to}`);
+    console.log(`📞 Call from ${data.fromName} (${data.from}) to ${data.to}`);
     
+    // Проверяем, онлайн ли получатель
     let receiverOnline = false;
     for (let [sockId, uid] of activeSockets.entries()) {
         if (uid === data.to) {
@@ -683,6 +685,7 @@ socket.on('call_user', async (data) => {
         }
     }
     
+    // Если онлайн — отправляем через сокет
     if (receiverOnline) {
         io.to(`user_${data.to}`).emit('incoming_call', {
             from: data.from,
@@ -690,11 +693,10 @@ socket.on('call_user', async (data) => {
             callType: data.callType,
             offer: data.offer
         });
-    } else {
-        socket.emit('call_failed', { reason: 'user_offline' });
+        console.log(`✅ Socket call sent to user ${data.to}`);
     }
     
-    // Отправляем Push уведомление в любом случае
+    // ВСЕГДА пытаемся отправить Push (даже если онлайн)
     const subscription = pushSubscriptions.get(String(data.to));
     if (subscription) {
         try {
@@ -705,14 +707,21 @@ socket.on('call_user', async (data) => {
                 callerName: data.fromName,
                 callType: data.callType
             }));
-            console.log(`📲 Push sent to user ${data.to}`);
+            console.log(`📲 Push notification sent to user ${data.to}`);
         } catch (error) {
-            console.error('Push failed:', error);
+            console.error('❌ Push failed:', error);
             // Удаляем невалидную подписку
-            if (error.statusCode === 410) {
+            if (error.statusCode === 410 || error.statusCode === 404) {
                 pushSubscriptions.delete(String(data.to));
             }
         }
+    } else {
+        console.log(`ℹ️ No push subscription for user ${data.to}`);
+    }
+    
+    // Если получатель офлайн И нет push подписки — тогда говорим что офлайн
+    if (!receiverOnline && !subscription) {
+        socket.emit('call_failed', { reason: 'user_offline' });
     }
 });
 
