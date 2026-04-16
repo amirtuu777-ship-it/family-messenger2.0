@@ -283,6 +283,18 @@ app.post('/api/upload-file', uploadFile.single('file'), async (req, res) => {
     }
 });
 
+// Push подписка
+app.post('/api/push/subscribe', express.json(), (req, res) => {
+    const { userId, subscription } = req.body;
+    if (userId && subscription) {
+        pushSubscriptions.set(String(userId), subscription);
+        console.log(`📱 Push subscription saved for user ${userId}`);
+        res.json({ success: true });
+    } else {
+        res.status(400).json({ error: 'Missing data' });
+    }
+});
+
 // Получение файла
 app.get('/api/file/:fileId', async (req, res) => {
     const { fileId } = req.params;
