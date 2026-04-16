@@ -101,6 +101,35 @@ async function init() {
     if (savedUser) {
         try {
             currentUser = JSON.parse(savedUser);
+
+             // ========== ПРОВЕРКА URL ПАРАМЕТРОВ (из уведомления) ==========
+            const urlParams = new URLSearchParams(window.location.search);
+            const caller = urlParams.get('caller');
+            const action = urlParams.get('action');
+            
+            if (caller && action) {
+                console.log(`📱 Opened from notification: caller=${caller}, action=${action}`);
+                // Очищаем URL
+                window.history.replaceState({}, document.title, '/');
+                
+                // Ждём загрузки чатов, потом обработаем
+                setTimeout(async () => {
+                    if (action === 'accept') {
+                        // Получаем имя звонящего
+                        try {
+                            const response = await fetch(`${SERVER_URL}/api/auth/${caller}`);
+                            const user = await response.json();
+                            // Открываем чат с этим пользователем
+                            if (typeof openChat === 'function') {
+                                openChat(parseInt(caller), user.username);
+                            }
+                        } catch (e) {
+                            console.error('Error getting caller info:', e);
+                        }
+                    }
+                }, 1000);
+            }
+            
             const response = await fetch(`${SERVER_URL}/api/auth/users?exclude=${currentUser.id}`);
             if (response.ok) {
                 connectSocket();
