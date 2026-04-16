@@ -101,8 +101,9 @@ async function init() {
     if (savedUser) {
         try {
             currentUser = JSON.parse(savedUser);
-
-             // ========== ПРОВЕРКА URL ПАРАМЕТРОВ (из уведомления) ==========
+            registerServiceWorker();
+             
+            // ========== ПРОВЕРКА URL ПАРАМЕТРОВ (из уведомления) ==========
             const urlParams = new URLSearchParams(window.location.search);
             const caller = urlParams.get('caller');
             const action = urlParams.get('action');
@@ -231,8 +232,10 @@ async function login() {
     
     if (response.ok) {
         currentUser = data.user;
-        registerServiceWorker();
         localStorage.setItem('shariq_user', JSON.stringify(currentUser));
+        
+        registerServiceWorker();
+        
         connectSocket();
         loadChats();
     } else {
