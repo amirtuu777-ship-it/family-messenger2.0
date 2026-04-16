@@ -37,24 +37,37 @@ async function startCall(contactId, contactName, callType = 'audio') {
     showCallScreen('outgoing', contactName, callType);
     
     try {
-        // Получаем медиа (то, что доступно)
+        // Получаем медиа
         await getAvailableMedia(callType);
         
+        // Создаём peer connection
         await createPeerConnection();
         
-        // Добавляем треки которые есть
+        // Добавляем ВСЕ треки из localStream
         localStream.getTracks().forEach(track => {
+            console.log(`➕ Adding local ${track.kind} track to peer connection`);
             peerConnection.addTrack(track, localStream);
         });
         
         // Отображаем локальное видео если есть
         updateLocalVideoDisplay();
         
-        // Создаём offer
-        const offer = await peerConnection.createOffer();
+        // Создаём offer с правильными настройками
+        const offerOptions = {
+            offerToReceiveAudio: true,
+            offerToReceiveVideo: true  // ВСЕГДА true, чтобы получать видео от собеседника
+        };
+        
+        const offer = await peerConnection.createOffer(offerOptions);
         await peerConnection.setLocalDescription(offer);
         
-        // Отправляем сигнал с информацией о доступных треках
+        console.log(`📤 Created offer:`, {
+            video: currentCall.hasVideo,
+            audio: currentCall.hasAudio,
+            sdp: offer.sdp.substring(0, 100) + '...'
+        });
+        
+        // Отправляем сигнал
         socket.emit('call_user', {
             to: contactId,
             from: currentUser.id,
@@ -64,8 +77,6 @@ async function startCall(contactId, contactName, callType = 'audio') {
             hasAudio: currentCall.hasAudio,
             offer: offer
         });
-        
-        console.log(`📤 Offer sent (video: ${currentCall.hasVideo}, audio: ${currentCall.hasAudio})`);
         
     } catch (error) {
         console.error('❌ Ошибка при запуске звонка:', error);
@@ -85,21 +96,37 @@ async function acceptCall() {
     updateCallStatus('Соединение...');
     
     try {
-        // Получаем доступные медиа
+        // Получаем медиа
         await getAvailableMedia(currentCall.type);
         
+        // Создаём peer connection
         await createPeerConnection();
         
+        // Добавляем ВСЕ треки
         localStream.getTracks().forEach(track => {
+            console.log(`➕ Adding local ${track.kind} track to peer connection`);
             peerConnection.addTrack(track, localStream);
         });
         
         updateLocalVideoDisplay();
         
+        // Устанавливаем remote description
         if (currentCall.incomingOffer) {
             await peerConnection.setRemoteDescription(new RTCSessionDescription(currentCall.incomingOffer));
-            const answer = await peerConnection.createAnswer();
+            
+            // Создаём answer с правильными настройками
+            const answerOptions = {
+                offerToReceiveAudio: true,
+                offerToReceiveVideo: true
+            };
+            
+            const answer = await peerConnection.createAnswer(answerOptions);
             await peerConnection.setLocalDescription(answer);
+            
+            console.log(`📤 Created answer:`, {
+                video: currentCall.hasVideo,
+                audio: currentCall.hasAudio
+            });
             
             socket.emit('call_accepted', {
                 to: currentCall.contactId,
@@ -113,7 +140,6 @@ async function acceptCall() {
         document.getElementById('call-decline-btn').textContent = 'Завершить';
         document.querySelector('.call-controls').style.display = 'flex';
         
-        // Показываем/скрываем кнопку видео в зависимости от типа звонка
         updateControlsVisibility();
         
     } catch (error) {
@@ -129,24 +155,30 @@ async function acceptCall() {
 // ========== ПОЛУЧЕНИЕ ДОСТУПНЫХ МЕДИА ==========
 
 async function getAvailableMedia(requestedType) {
-    console.log(`🎥 Getting available media (requested: ${requestedType})...`);
+    console.log(`🎥 Getting media (requested: ${requestedType})...`);
     
-    const constraints = { audio: true, video: requestedType === 'video' };
+    // ВСЕГДА запрашиваем аудио
+    const constraints = {
+        audio: true,
+        video: requestedType === 'video'
+    };
     
     try {
-        // Пробуем получить всё что запрошено
         localStream = await navigator.mediaDevices.getUserMedia(constraints);
         currentCall.hasVideo = requestedType === 'video';
         currentCall.hasAudio = true;
         console.log(`✅ Got video: ${currentCall.hasVideo}, audio: ${currentCall.hasAudio}`);
         
     } catch (error) {
-        console.warn('⚠️ Full media not available, trying fallbacks...');
+        console.warn('⚠️ Requested media not available:', error);
         
         // Если запрошено видео, но не получилось — пробуем только аудио
         if (requestedType === 'video') {
             try {
-                localStream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
+                localStream = await navigator.mediaDevices.getUserMedia({ 
+                    video: false, 
+                    audio: true 
+                });
                 currentCall.hasVideo = false;
                 currentCall.hasAudio = true;
                 currentCall.type = 'audio';
@@ -154,42 +186,26 @@ async function getAvailableMedia(requestedType) {
                 console.log('✅ Fallback to audio only');
                 
             } catch (audioError) {
-                // Пробуем только видео (странный случай, но вдруг)
-                try {
-                    localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-                    currentCall.hasVideo = true;
-                    currentCall.hasAudio = false;
-                    showCallNotification('Микрофон недоступен, звонок без звука');
-                    console.log('✅ Fallback to video only (no audio)');
-                    
-                } catch (videoError) {
-                    // Ничего не доступно
-                    currentCall.hasVideo = false;
-                    currentCall.hasAudio = false;
-                    throw new Error('NO_MEDIA_PERMISSION');
-                }
-            }
-        } else {
-            // Запрошено только аудио, но не получилось
-            try {
-                localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-                currentCall.hasVideo = true;
-                currentCall.hasAudio = false;
-                showCallNotification('Микрофон недоступен, звонок без звука');
-                console.log('✅ Fallback to video only (no audio)');
-                
-            } catch (videoError) {
+                console.error('❌ Audio also not available:', audioError);
                 currentCall.hasVideo = false;
                 currentCall.hasAudio = false;
                 throw new Error('NO_MEDIA_PERMISSION');
             }
+        } else {
+            // Запрошено только аудио, но не получилось
+            console.error('❌ Audio not available:', error);
+            currentCall.hasVideo = false;
+            currentCall.hasAudio = false;
+            throw new Error('NO_MEDIA_PERMISSION');
         }
     }
 }
 
-// ========== ПЕРЕКЛЮЧЕНИЕ ВИДЕО ВО ВРЕМЯ ЗВОНКА ==========
+// ========== ПЕРЕКЛЮЧЕНИЕ ВИДЕО ==========
 
 async function toggleVideo() {
+    console.log(`🎥 Toggle video (current: ${currentCall.hasVideo})`);
+    
     if (currentCall.hasVideo) {
         // Выключаем видео
         const videoTrack = localStream.getVideoTracks()[0];
@@ -197,12 +213,11 @@ async function toggleVideo() {
             videoTrack.enabled = false;
             currentCall.hasVideo = false;
             
-            // Убираем локальное видео
             const localVideo = document.getElementById('local-video');
             if (localVideo) localVideo.style.display = 'none';
             
-            // Уведомляем собеседника
-            notifyTrackChange('video', false);
+            // Показываем аватар
+            showAvatar();
         }
         document.querySelector('.video-btn').textContent = '📷❌';
         document.querySelector('.video-btn').style.backgroundColor = '#f44336';
@@ -210,11 +225,14 @@ async function toggleVideo() {
     } else {
         // Пробуем включить видео
         try {
-            const newStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+            const newStream = await navigator.mediaDevices.getUserMedia({ 
+                video: true, 
+                audio: false 
+            });
             const newVideoTrack = newStream.getVideoTracks()[0];
             
             if (newVideoTrack) {
-                // Заменяем видео трек в peer connection
+                // Заменяем или добавляем видео трек
                 const senders = peerConnection.getSenders();
                 const videoSender = senders.find(s => s.track && s.track.kind === 'video');
                 
@@ -224,7 +242,7 @@ async function toggleVideo() {
                     peerConnection.addTrack(newVideoTrack, localStream);
                 }
                 
-                // Добавляем в локальный стрим
+                // Обновляем локальный стрим
                 const oldVideoTrack = localStream.getVideoTracks()[0];
                 if (oldVideoTrack) {
                     localStream.removeTrack(oldVideoTrack);
@@ -234,15 +252,17 @@ async function toggleVideo() {
                 
                 currentCall.hasVideo = true;
                 
-                // Показываем локальное видео
                 const localVideo = document.getElementById('local-video');
                 if (localVideo) {
                     localVideo.srcObject = localStream;
                     localVideo.style.display = 'block';
                 }
                 
-                // Уведомляем собеседника
-                notifyTrackChange('video', true);
+                // Скрываем аватар
+                hideAvatar();
+                
+                // Пересоздаём offer для синхронизации
+                await renegotiate();
             }
             
             document.querySelector('.video-btn').textContent = '📹';
@@ -255,7 +275,28 @@ async function toggleVideo() {
     }
 }
 
-// ========== ПЕРЕКЛЮЧЕНИЕ АУДИО ВО ВРЕМЯ ЗВОНКА ==========
+// Пересогласование соединения
+async function renegotiate() {
+    try {
+        const offerOptions = {
+            offerToReceiveAudio: true,
+            offerToReceiveVideo: true
+        };
+        
+        const offer = await peerConnection.createOffer(offerOptions);
+        await peerConnection.setLocalDescription(offer);
+        
+        socket.emit('call_renegotiate', {
+            to: currentCall.contactId,
+            offer: offer
+        });
+        
+    } catch (error) {
+        console.error('❌ Renegotiation failed:', error);
+    }
+}
+
+// ========== ПЕРЕКЛЮЧЕНИЕ АУДИО ==========
 
 function toggleMute() {
     const audioTrack = localStream.getAudioTracks()[0];
@@ -266,19 +307,21 @@ function toggleMute() {
         const btn = document.querySelector('.mute-btn');
         btn.textContent = audioTrack.enabled ? '🎤' : '🔇';
         btn.style.backgroundColor = audioTrack.enabled ? '' : '#f44336';
-        
-        // Уведомляем собеседника
-        notifyTrackChange('audio', audioTrack.enabled);
     }
 }
 
-// Уведомить собеседника об изменении треков
-function notifyTrackChange(kind, enabled) {
-    socket.emit('track_changed', {
-        to: currentCall.contactId,
-        kind: kind,
-        enabled: enabled
-    });
+// ========== УПРАВЛЕНИЕ АВАТАРОМ ==========
+
+function showAvatar() {
+    const container = document.querySelector('.call-video-container');
+    const avatar = container.querySelector('.audio-avatar');
+    if (avatar) avatar.style.display = 'flex';
+}
+
+function hideAvatar() {
+    const container = document.querySelector('.call-video-container');
+    const avatar = container.querySelector('.audio-avatar');
+    if (avatar) avatar.style.display = 'none';
 }
 
 // ========== PEER CONNECTION ==========
@@ -296,11 +339,24 @@ async function createPeerConnection() {
     };
     
     peerConnection.ontrack = (event) => {
-        console.log(`📹 Remote ${event.track.kind} track received`);
-        const remoteVideo = document.getElementById('remote-video');
-        if (remoteVideo && event.track.kind === 'video') {
-            remoteVideo.srcObject = event.streams[0];
-            remoteVideo.style.display = 'block';
+        console.log(`📹 Remote ${event.track.kind} track received, streams:`, event.streams.length);
+        
+        if (event.track.kind === 'video') {
+            const remoteVideo = document.getElementById('remote-video');
+            if (remoteVideo) {
+                remoteVideo.srcObject = event.streams[0];
+                remoteVideo.style.display = 'block';
+                hideAvatar();
+                
+                // ВАЖНО: принудительно запускаем воспроизведение
+                remoteVideo.play().catch(e => console.warn('Play failed:', e));
+            }
+        } else if (event.track.kind === 'audio') {
+            // Аудио автоматически воспроизводится через srcObject видео элемента
+            const remoteVideo = document.getElementById('remote-video');
+            if (remoteVideo && !remoteVideo.srcObject) {
+                remoteVideo.srcObject = event.streams[0];
+            }
         }
     };
     
@@ -315,55 +371,52 @@ async function createPeerConnection() {
             endCall();
         }
     };
+    
+    peerConnection.oniceconnectionstatechange = () => {
+        console.log('🧊 ICE state:', peerConnection.iceConnectionState);
+    };
 }
 
 // ========== ОБНОВЛЕНИЕ ОТОБРАЖЕНИЯ ==========
 
 function updateLocalVideoDisplay() {
     const localVideo = document.getElementById('local-video');
+    const avatar = document.querySelector('.audio-avatar');
+    
     if (localVideo) {
         if (currentCall.hasVideo) {
             localVideo.srcObject = localStream;
             localVideo.style.display = 'block';
+            if (avatar) avatar.style.display = 'none';
         } else {
             localVideo.style.display = 'none';
-        }
-    }
-    
-    // Если нет видео, показываем аватар
-    if (!currentCall.hasVideo) {
-        const container = document.querySelector('.call-video-container');
-        if (container && !container.querySelector('.audio-avatar')) {
-            const avatar = document.createElement('div');
-            avatar.className = 'audio-avatar';
-            avatar.textContent = currentCall.contactName[0].toUpperCase();
-            container.appendChild(avatar);
+            if (avatar) avatar.style.display = 'flex';
         }
     }
 }
 
 function updateControlsVisibility() {
-    // Кнопка видео всегда видна, если звонок был начат как видео
-    // или если мы хотим дать возможность включить видео в любой момент
-    const videoBtn = document.querySelector('.video-btn');
-    if (!videoBtn) {
-        // Если кнопки нет, но тип звонка видео — добавляем
-        const controls = document.querySelector('.call-controls');
-        if (controls && currentCall.type === 'video') {
-            const btn = document.createElement('button');
-            btn.className = 'call-btn video-btn';
-            btn.onclick = toggleVideo;
-            btn.title = 'Включить/выключить камеру';
-            btn.textContent = currentCall.hasVideo ? '📹' : '📷❌';
-            if (!currentCall.hasVideo) btn.style.backgroundColor = '#f44336';
-            
-            // Вставляем после mute-btn
-            const muteBtn = controls.querySelector('.mute-btn');
-            if (muteBtn) {
-                muteBtn.insertAdjacentElement('afterend', btn);
-            } else {
-                controls.insertBefore(btn, controls.firstChild);
-            }
+    const controls = document.querySelector('.call-controls');
+    if (!controls) return;
+    
+    // Проверяем, есть ли уже кнопка видео
+    let videoBtn = controls.querySelector('.video-btn');
+    
+    // Если тип звонка видео, но кнопки нет — добавляем
+    if (currentCall.type === 'video' && !videoBtn) {
+        videoBtn = document.createElement('button');
+        videoBtn.className = 'call-btn video-btn';
+        videoBtn.onclick = toggleVideo;
+        videoBtn.title = 'Включить/выключить камеру';
+        videoBtn.textContent = currentCall.hasVideo ? '📹' : '📷❌';
+        if (!currentCall.hasVideo) videoBtn.style.backgroundColor = '#f44336';
+        
+        // Вставляем после mute-btn
+        const muteBtn = controls.querySelector('.mute-btn');
+        if (muteBtn) {
+            muteBtn.insertAdjacentElement('afterend', videoBtn);
+        } else {
+            controls.appendChild(videoBtn);
         }
     }
 }
@@ -442,6 +495,39 @@ function setupCallHandlers() {
         }
     });
     
+    socket.on('call_renegotiate', async (data) => {
+        try {
+            if (data.offer && peerConnection) {
+                await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
+                
+                const answerOptions = {
+                    offerToReceiveAudio: true,
+                    offerToReceiveVideo: true
+                };
+                
+                const answer = await peerConnection.createAnswer(answerOptions);
+                await peerConnection.setLocalDescription(answer);
+                
+                socket.emit('call_renegotiate_answer', {
+                    to: currentCall.contactId,
+                    answer: answer
+                });
+            }
+        } catch (error) {
+            console.error('❌ Renegotiation error:', error);
+        }
+    });
+    
+    socket.on('call_renegotiate_answer', async (data) => {
+        try {
+            if (data.answer && peerConnection) {
+                await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+            }
+        } catch (error) {
+            console.error('❌ Error setting renegotiation answer:', error);
+        }
+    });
+    
     socket.on('ice_candidate', async (data) => {
         try {
             if (data.candidate && peerConnection) {
@@ -462,11 +548,6 @@ function setupCallHandlers() {
             showCallNotification('Абонент не в сети');
         }
         endCall();
-    });
-    
-    socket.on('track_changed', (data) => {
-        console.log(`🔄 Remote ${data.kind} ${data.enabled ? 'enabled' : 'disabled'}`);
-        // Просто информационно, UI обновится автоматически через ontrack
     });
 }
 
@@ -510,21 +591,6 @@ function showCallScreen(type, contactName, callType) {
     `;
     
     document.body.appendChild(screen);
-    
-    // Скрываем аватар если будет видео
-    const avatar = screen.querySelector('.audio-avatar');
-    const remoteVideo = screen.querySelector('#remote-video');
-    
-    // Наблюдаем за появлением видео
-    const observer = new MutationObserver(() => {
-        if (remoteVideo.srcObject) {
-            avatar.style.display = 'none';
-        } else {
-            avatar.style.display = 'flex';
-        }
-    });
-    
-    observer.observe(remoteVideo, { attributes: true, childList: false, subtree: false });
 }
 
 function hideCallScreen() {
