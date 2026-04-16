@@ -744,9 +744,8 @@ socket.on('call_failed', (data) => {
             activeSockets.delete(socket.id);
         }
     });
-});
 
-    // Пересогласование соединения (для включения видео во время звонка)
+// Пересогласование соединения (для включения видео во время звонка)
     socket.on('call_renegotiate', (data) => {
         io.to(`user_${data.to}`).emit('call_renegotiate', { offer: data.offer });
     });
@@ -754,6 +753,7 @@ socket.on('call_failed', (data) => {
     socket.on('call_renegotiate_answer', (data) => {
         io.to(`user_${data.to}`).emit('call_renegotiate_answer', { answer: data.answer });
     });
+});
 
 // ========== ПОЛУЧАЕМ ЛОКАЛЬНЫЙ IP ==========
 const { networkInterfaces } = require('os');
