@@ -1908,32 +1908,3 @@ input:checked + .slider:before {
 .message-menu-btn {
     pointer-events: auto; /* Чтобы кнопка была кликабельной */
 }
-
-/* Кнопки звонка в шапке чата */
-.call-btn-header {
-    background: transparent;
-    border: none;
-    color: var(--header-text);
-    font-size: 20px;
-    cursor: pointer;
-    width: 40px;
-    height: 40px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 50%;
-    transition: background 0.2s;
-    margin-right: 5px;
-}
-
-.call-btn-header:hover {
-    background: rgba(255, 255, 255, 0.1);
-}
-
-@media (max-width: 600px) {
-    .call-btn-header {
-        width: 36px;
-        height: 36px;
-        font-size: 18px;
-    }
-}
