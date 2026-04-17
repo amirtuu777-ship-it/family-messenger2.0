@@ -101,36 +101,6 @@ async function init() {
     if (savedUser) {
         try {
             currentUser = JSON.parse(savedUser);
-            registerServiceWorker();
-             
-            // ========== ПРОВЕРКА URL ПАРАМЕТРОВ (из уведомления) ==========
-            const urlParams = new URLSearchParams(window.location.search);
-            const caller = urlParams.get('caller');
-            const action = urlParams.get('action');
-            
-            if (caller && action) {
-                console.log(`📱 Opened from notification: caller=${caller}, action=${action}`);
-                // Очищаем URL
-                window.history.replaceState({}, document.title, '/');
-                
-                // Ждём загрузки чатов, потом обработаем
-                setTimeout(async () => {
-                    if (action === 'accept') {
-                        // Получаем имя звонящего
-                        try {
-                            const response = await fetch(`${SERVER_URL}/api/auth/${caller}`);
-                            const user = await response.json();
-                            // Открываем чат с этим пользователем
-                            if (typeof openChat === 'function') {
-                                openChat(parseInt(caller), user.username);
-                            }
-                        } catch (e) {
-                            console.error('Error getting caller info:', e);
-                        }
-                    }
-                }, 1000);
-            }
-            
             const response = await fetch(`${SERVER_URL}/api/auth/users?exclude=${currentUser.id}`);
             if (response.ok) {
                 connectSocket();
@@ -603,65 +573,3 @@ window.addEventListener('beforeunload', () => {
 
 // Запуск приложения
 document.addEventListener('DOMContentLoaded', init);
-// ========== SERVICE WORKER ==========
-
-async function registerServiceWorker() {
-    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-        console.warn('Push notifications not supported');
-        return;
-    }
-    
-    try {
-        const registration = await navigator.serviceWorker.register('/sw.js');
-        console.log('✅ SW registered');
-        
-        if (Notification.permission === 'default') {
-            await Notification.requestPermission();
-        }
-        
-        if (Notification.permission === 'granted') {
-            await subscribeToPush(registration);
-        }
-    } catch (error) {
-        console.error('SW registration failed:', error);
-    }
-}
-
-async function subscribeToPush(registration) {
-    try {
-        // ЗАМЕНИ НА СВОЙ ПУБЛИЧНЫЙ КЛЮЧ из шага 2
-        const publicVapidKey = 'ТВОЙ_ПУБЛИЧНЫЙ_КЛЮЧ_СЮДА';
-        
-        const subscription = await registration.pushManager.subscribe({
-            userVisibleOnly: true,
-            applicationServerKey: urlBase64ToUint8Array(publicVapidKey)
-        });
-        
-        await fetch('/api/push/subscribe', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                userId: currentUser?.id,
-                subscription: subscription
-            })
-        });
-        
-        console.log('✅ Push subscribed');
-    } catch (error) {
-        console.error('Push subscription failed:', error);
-    }
-}
-
-function urlBase64ToUint8Array(base64String) {
-    const padding = '='.repeat((4 - base64String.length % 4) % 4);
-    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
-    const rawData = window.atob(base64);
-    const outputArray = new Uint8Array(rawData.length);
-    for (let i = 0; i < rawData.length; ++i) {
-        outputArray[i] = rawData.charCodeAt(i);
-    }
-    return outputArray;
-}
-
-// Вызвать в init() после успешного входа
-// добавить строку: registerServiceWorker();
