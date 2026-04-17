@@ -403,6 +403,7 @@ async function showMiniProfile(userId, username) {
             if (e.target === modal) modal.remove();
         };
         
+        // Проверяем, есть ли аватарка
         let avatarHtml = '';
         try {
             const avatarResponse = await fetch(`${SERVER_URL}/api/avatar/${userId}`);
