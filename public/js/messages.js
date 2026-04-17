@@ -46,8 +46,6 @@ async function openChat(userId, username) {
                 </div>
                 <div class="typing-indicator" id="typing-indicator" style="display:none;">печатает...</div>
             </div>
-            <button class="call-audio-btn" onclick="startCall(${userId}, '${username}', 'audio')" title="Аудиозвонок" style="background:transparent;border:none;color:white;font-size:20px;cursor:pointer;width:40px;height:40px;display:flex;align-items:center;justify-content:center;margin-right:5px;">📞</button>
-            <button class="call-video-btn" onclick="startCall(${userId}, '${username}', 'video')" title="Видеозвонок" style="background:transparent;border:none;color:white;font-size:20px;cursor:pointer;width:40px;height:40px;display:flex;align-items:center;justify-content:center;margin-right:5px;">📹</button>
             <div class="chat-menu">
                 <button class="menu-dots" onclick="toggleChatMenu()">⋮</button>
                 <div id="chat-menu-dropdown" class="chat-menu-dropdown" style="display:none;">
@@ -432,12 +430,6 @@ async function showMiniProfile(userId, username) {
                 <div class="profile-actions">
                     <button onclick="openChat(${user.id}, '${user.username}'); this.closest('.profile-modal').remove();">
                         💬 Написать
-                    </button>
-                    <button onclick="startCall(${user.id}, '${user.username}', 'audio'); this.closest('.profile-modal').remove();">
-                        📞 Аудио
-                    </button>
-                    <button onclick="startCall(${user.id}, '${user.username}', 'video'); this.closest('.profile-modal').remove();">
-                        📹 Видео
                     </button>
                     <button onclick="this.closest('.profile-modal').remove()">
                         ✕ Закрыть
