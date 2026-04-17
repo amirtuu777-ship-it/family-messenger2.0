@@ -717,7 +717,16 @@ socket.on('call_failed', (data) => {
     socket.emit('call_failed', data);
 });
   
-    socket.on('disconnect', async () => {
+// Пересогласование соединения (для включения видео во время звонка)
+    socket.on('call_renegotiate', (data) => {
+        io.to(`user_${data.to}`).emit('call_renegotiate', { offer: data.offer });
+    });
+
+    socket.on('call_renegotiate_answer', (data) => {
+        io.to(`user_${data.to}`).emit('call_renegotiate_answer', { answer: data.answer });
+    });
+  
+  socket.on('disconnect', async () => {
         const userId = activeSockets.get(socket.id);
         console.log(`🔴 Клиент отключен: ${socket.id}, userId: ${userId}`);
 
@@ -745,14 +754,6 @@ socket.on('call_failed', (data) => {
         }
     });
 
-// Пересогласование соединения (для включения видео во время звонка)
-    socket.on('call_renegotiate', (data) => {
-        io.to(`user_${data.to}`).emit('call_renegotiate', { offer: data.offer });
-    });
-
-    socket.on('call_renegotiate_answer', (data) => {
-        io.to(`user_${data.to}`).emit('call_renegotiate_answer', { answer: data.answer });
-    });
 });
 
 // ========== ПОЛУЧАЕМ ЛОКАЛЬНЫЙ IP ==========
