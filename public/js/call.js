@@ -13,14 +13,23 @@ let currentCall = {
 const rtcConfig = {
     iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' }
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' },
+        { urls: 'stun:stun3.l.google.com:19302' },
+        { urls: 'stun:stun4.l.google.com:19302' }
     ]
 };
 
 // ========== ЗАПУСК ЗВОНКА ==========
 
 async function startCall(contactId, contactName, callType = 'audio') {
-    console.log(`📞 Starting ${callType} call to ${contactName}`);
+    console.log(`📞 Starting ${callType} call to ${contactName} (${contactId})`);
+    
+    // Проверяем, что текущий пользователь есть
+    if (!currentUser || !currentUser.id) {
+        alert('Ошибка: пользователь не авторизован');
+        return;
+    }
     
     currentCall = {
         type: callType,
@@ -38,15 +47,18 @@ async function startCall(contactId, contactName, callType = 'audio') {
         };
         
         localStream = await navigator.mediaDevices.getUserMedia(constraints);
+        console.log('✅ Local stream obtained');
         
         await createPeerConnection();
         
         localStream.getTracks().forEach(track => {
+            console.log(`➕ Adding ${track.kind} track`);
             peerConnection.addTrack(track, localStream);
         });
         
         if (callType === 'video') {
-            document.getElementById('local-video').srcObject = localStream;
+            const localVideo = document.getElementById('local-video');
+            if (localVideo) localVideo.srcObject = localStream;
         }
         
         const offer = await peerConnection.createOffer({
@@ -54,6 +66,8 @@ async function startCall(contactId, contactName, callType = 'audio') {
             offerToReceiveVideo: true
         });
         await peerConnection.setLocalDescription(offer);
+        
+        console.log('📤 Sending offer to server');
         
         socket.emit('call_user', {
             to: contactId,
@@ -65,7 +79,11 @@ async function startCall(contactId, contactName, callType = 'audio') {
         
     } catch (error) {
         console.error('❌ Call error:', error);
-        alert('Не удалось получить доступ к камере/микрофону');
+        if (error.name === 'NotAllowedError') {
+            alert('Нет доступа к камере/микрофону');
+        } else {
+            alert('Не удалось начать звонок: ' + error.message);
+        }
         endCall();
     }
 }
@@ -73,10 +91,26 @@ async function startCall(contactId, contactName, callType = 'audio') {
 // ========== ПРИНЯТЬ ЗВОНОК ==========
 
 async function acceptCall() {
-    console.log('📞 Accepting call');
+    console.log('📞 Accepting call, incoming offer:', !!currentCall.incomingOffer);
+    
+    if (!currentCall.incomingOffer) {
+        console.error('❌ No incoming offer!');
+        alert('Ошибка: нет входящего звонка');
+        endCall();
+        return;
+    }
     
     currentCall.status = 'connected';
     updateCallStatus('Соединение...');
+    
+    // Сразу меняем кнопки
+    const acceptBtn = document.getElementById('call-accept-btn');
+    const declineBtn = document.getElementById('call-decline-btn');
+    const controls = document.querySelector('.call-controls');
+    
+    if (acceptBtn) acceptBtn.style.display = 'none';
+    if (declineBtn) declineBtn.textContent = 'Завершить';
+    if (controls) controls.style.display = 'flex';
     
     try {
         const constraints = {
@@ -85,37 +119,40 @@ async function acceptCall() {
         };
         
         localStream = await navigator.mediaDevices.getUserMedia(constraints);
+        console.log('✅ Local stream obtained');
         
         await createPeerConnection();
         
         localStream.getTracks().forEach(track => {
+            console.log(`➕ Adding ${track.kind} track`);
             peerConnection.addTrack(track, localStream);
         });
         
         if (currentCall.type === 'video') {
-            document.getElementById('local-video').srcObject = localStream;
+            const localVideo = document.getElementById('local-video');
+            if (localVideo) localVideo.srcObject = localStream;
         }
         
+        console.log('📥 Setting remote description...');
         await peerConnection.setRemoteDescription(new RTCSessionDescription(currentCall.incomingOffer));
         
+        console.log('📤 Creating answer...');
         const answer = await peerConnection.createAnswer({
             offerToReceiveAudio: true,
             offerToReceiveVideo: true
         });
         await peerConnection.setLocalDescription(answer);
         
+        console.log('📤 Sending answer to server');
+        
         socket.emit('call_accepted', {
             to: currentCall.contactId,
             answer: answer
         });
         
-        document.getElementById('call-accept-btn').style.display = 'none';
-        document.getElementById('call-decline-btn').textContent = 'Завершить';
-        document.querySelector('.call-controls').style.display = 'flex';
-        
     } catch (error) {
         console.error('❌ Accept error:', error);
-        alert('Не удалось принять звонок');
+        alert('Не удалось принять звонок: ' + error.message);
         endCall();
     }
 }
@@ -123,6 +160,7 @@ async function acceptCall() {
 // ========== ОТКЛОНИТЬ ==========
 
 function declineCall() {
+    console.log('📞 Declining call');
     socket.emit('call_declined', { to: currentCall.contactId });
     endCall();
 }
@@ -130,6 +168,7 @@ function declineCall() {
 // ========== ЗАВЕРШИТЬ ==========
 
 function endCall() {
+    console.log('📞 Ending call');
     if (currentCall.status) {
         socket.emit('call_ended', { to: currentCall.contactId });
     }
@@ -144,6 +183,7 @@ async function createPeerConnection() {
     
     peerConnection.onicecandidate = (event) => {
         if (event.candidate) {
+            console.log('🧊 Sending ICE candidate');
             socket.emit('ice_candidate', {
                 to: currentCall.contactId,
                 candidate: event.candidate
@@ -151,22 +191,29 @@ async function createPeerConnection() {
         }
     };
     
+    peerConnection.oniceconnectionstatechange = () => {
+        console.log('🧊 ICE state:', peerConnection.iceConnectionState);
+    };
+    
     peerConnection.ontrack = (event) => {
-        console.log('📹 Remote track received:', event.track.kind);
+        console.log('📹 Remote track received:', event.track.kind, 'streams:', event.streams.length);
         const remoteVideo = document.getElementById('remote-video');
-        if (remoteVideo) {
+        if (remoteVideo && event.streams.length > 0) {
             remoteVideo.srcObject = event.streams[0];
+            // Принудительно запускаем воспроизведение
+            remoteVideo.play().catch(e => console.warn('Play failed:', e));
         }
     };
     
     peerConnection.onconnectionstatechange = () => {
-        console.log('🔌 State:', peerConnection.connectionState);
+        console.log('🔌 Connection state:', peerConnection.connectionState);
         if (peerConnection.connectionState === 'connected') {
             currentCall.status = 'connected';
             updateCallStatus('Разговор...');
         } else if (peerConnection.connectionState === 'disconnected' || 
                    peerConnection.connectionState === 'failed') {
-            endCall();
+            console.log('⚠️ Connection lost');
+            // Не завершаем сразу, может переподключиться
         }
     };
 }
@@ -179,8 +226,10 @@ function toggleMute() {
         if (audioTrack) {
             audioTrack.enabled = !audioTrack.enabled;
             const btn = document.querySelector('.mute-btn');
-            btn.textContent = audioTrack.enabled ? '🎤' : '🔇';
-            btn.style.backgroundColor = audioTrack.enabled ? '' : '#f44336';
+            if (btn) {
+                btn.textContent = audioTrack.enabled ? '🎤' : '🔇';
+                btn.style.backgroundColor = audioTrack.enabled ? '' : '#f44336';
+            }
         }
     }
 }
@@ -191,16 +240,23 @@ function toggleVideo() {
         if (videoTrack) {
             videoTrack.enabled = !videoTrack.enabled;
             const btn = document.querySelector('.video-btn');
-            btn.textContent = videoTrack.enabled ? '📹' : '📷❌';
-            btn.style.backgroundColor = videoTrack.enabled ? '' : '#f44336';
-            document.getElementById('local-video').style.display = videoTrack.enabled ? 'block' : 'none';
+            const localVideo = document.getElementById('local-video');
+            if (btn) {
+                btn.textContent = videoTrack.enabled ? '📹' : '📷❌';
+                btn.style.backgroundColor = videoTrack.enabled ? '' : '#f44336';
+            }
+            if (localVideo) {
+                localVideo.style.display = videoTrack.enabled ? 'block' : 'none';
+            }
         }
     }
 }
 
 function toggleSpeaker() {
     const btn = document.querySelector('.speaker-btn');
-    btn.textContent = btn.textContent === '🔊' ? '📢' : '🔊';
+    if (btn) {
+        btn.textContent = btn.textContent === '🔊' ? '📢' : '🔊';
+    }
 }
 
 // ========== UI ==========
@@ -259,12 +315,18 @@ function updateCallStatus(text) {
 // ========== ОБРАБОТЧИКИ СИГНАЛОВ ==========
 
 function setupCallHandlers() {
-    if (!socket) return;
+    if (!socket) {
+        console.error('❌ Socket not available for call handlers');
+        return;
+    }
+    
+    console.log('✅ Setting up call handlers');
     
     socket.on('incoming_call', (data) => {
-        console.log('📞 Incoming call from:', data.fromName);
+        console.log('📞 Incoming call from:', data.fromName, 'type:', data.callType);
         
         if (currentCall.status) {
+            console.log('⚠️ Already in call, sending busy');
             socket.emit('call_busy', { to: data.from });
             return;
         }
@@ -281,30 +343,40 @@ function setupCallHandlers() {
     });
     
     socket.on('call_accepted', async (data) => {
+        console.log('✅ Call accepted, setting remote description');
         if (data.answer && peerConnection) {
-            await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
-            currentCall.status = 'connected';
-            updateCallStatus('Разговор...');
-            document.querySelector('.call-controls').style.display = 'flex';
+            try {
+                await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+                currentCall.status = 'connected';
+                updateCallStatus('Разговор...');
+                const controls = document.querySelector('.call-controls');
+                if (controls) controls.style.display = 'flex';
+            } catch (error) {
+                console.error('❌ Error setting remote description:', error);
+            }
         }
     });
     
     socket.on('call_declined', () => {
+        console.log('❌ Call declined');
         alert('Звонок отклонён');
         endCall();
     });
     
     socket.on('call_busy', () => {
+        console.log('⚠️ User busy');
         alert('Абонент занят');
         endCall();
     });
     
     socket.on('call_ended', () => {
+        console.log('🔚 Call ended by remote');
         alert('Звонок завершён');
         endCall();
     });
     
     socket.on('call_failed', (data) => {
+        console.log('❌ Call failed:', data.reason);
         if (data.reason === 'user_offline') {
             alert('Абонент не в сети');
         }
@@ -315,7 +387,9 @@ function setupCallHandlers() {
         if (data.candidate && peerConnection) {
             try {
                 await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
-            } catch (e) {}
+            } catch (e) {
+                console.warn('ICE candidate error:', e);
+            }
         }
     });
 }
