@@ -644,6 +644,56 @@ io.on('connection', (socket) => {
         }
     });
   
+        // ========== WebRTC СИГНАЛЫ ДЛЯ ЗВОНКОВ ==========
+
+    socket.on('call_user', (data) => {
+        console.log(`📞 Call from ${data.fromName} (${data.from}) to ${data.to}`);
+        
+        let receiverOnline = false;
+        for (let [sockId, uid] of activeSockets.entries()) {
+            if (uid === data.to) {
+                receiverOnline = true;
+                break;
+            }
+        }
+        
+        if (receiverOnline) {
+            io.to(`user_${data.to}`).emit('incoming_call', {
+                from: data.from,
+                fromName: data.fromName,
+                callType: data.callType,
+                offer: data.offer
+            });
+            console.log(`✅ Incoming call sent to user ${data.to}`);
+        } else {
+            socket.emit('call_failed', { reason: 'user_offline' });
+            console.log(`❌ User ${data.to} is offline`);
+        }
+    });
+
+    socket.on('call_accepted', (data) => {
+        console.log(`✅ Call accepted, sending answer to ${data.to}`);
+        io.to(`user_${data.to}`).emit('call_accepted', { answer: data.answer });
+    });
+
+    socket.on('call_declined', (data) => {
+        console.log(`❌ Call declined, notifying ${data.to}`);
+        io.to(`user_${data.to}`).emit('call_declined');
+    });
+
+    socket.on('call_busy', (data) => {
+        io.to(`user_${data.to}`).emit('call_busy');
+    });
+
+    socket.on('call_ended', (data) => {
+        console.log(`🔚 Call ended, notifying ${data.to}`);
+        io.to(`user_${data.to}`).emit('call_ended');
+    });
+
+    socket.on('ice_candidate', (data) => {
+        io.to(`user_${data.to}`).emit('ice_candidate', { candidate: data.candidate });
+    });
+  
     socket.on('disconnect', async () => {
         const userId = activeSockets.get(socket.id);
         console.log(`🔴 Клиент отключен: ${socket.id}, userId: ${userId}`);
