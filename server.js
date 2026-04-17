@@ -24,20 +24,6 @@ const {
   updateUsername
 } = require('./database');
 
-const webpush = require('web-push');
-
-// ЗАМЕНИ НА СВОИ КЛЮЧИ из шага 2
-const vapidKeys = {
-    publicKey: 'BLqud1G9zuzsDK3RpDOG0ykkWkQcCHgIS2jU6BVI9TxWEwdTvNCmfziTxxcoBrKVCBKQSjyCTy8UKhjcj81E-jo',
-    privateKey: 'IhG2zfdjIxzrCqyAgHLni-gadLxjYkT0qRfQ5Yaf9EI'
-};
-
-webpush.setVapidDetails(
-    'mailto:your-email@example.com',
-    vapidKeys.publicKey,
-    vapidKeys.privateKey
-);
-
 // Константы
 const app = express();
 
@@ -280,18 +266,6 @@ app.post('/api/upload-file', uploadFile.single('file'), async (req, res) => {
         console.error('❌ Ошибка сохранения файла:', err);
         try { fs.unlinkSync(req.file.path); } catch (e) {}
         res.status(500).json({ error: 'Ошибка сохранения файла' });
-    }
-});
-
-// Push подписка
-app.post('/api/push/subscribe', express.json(), (req, res) => {
-    const { userId, subscription } = req.body;
-    if (userId && subscription) {
-        pushSubscriptions.set(String(userId), subscription);
-        console.log(`📱 Push subscription saved for user ${userId}`);
-        res.json({ success: true });
-    } else {
-        res.status(400).json({ error: 'Missing data' });
     }
 });
 
@@ -573,7 +547,6 @@ initializeDatabase().then(() => {
 
 // Хранилище активных соединений
 const activeSockets = new Map();
-const pushSubscriptions = new Map();
 
 // ========== ОБРАБОТКА КЛИЕНТСКОЙ ЧАСТИ ==========
 app.get('*', (req, res, next) => {
@@ -673,10 +646,9 @@ io.on('connection', (socket) => {
 
     // ========== WebRTC СИГНАЛЫ ДЛЯ ЗВОНКОВ ==========
 
-socket.on('call_user', async (data) => {
+socket.on('call_user', (data) => {
     console.log(`📞 Call from ${data.fromName} (${data.from}) to ${data.to}`);
     
-    // Проверяем, онлайн ли получатель
     let receiverOnline = false;
     for (let [sockId, uid] of activeSockets.entries()) {
         if (uid === data.to) {
@@ -685,7 +657,6 @@ socket.on('call_user', async (data) => {
         }
     }
     
-    // Если онлайн — отправляем через сокет
     if (receiverOnline) {
         io.to(`user_${data.to}`).emit('incoming_call', {
             from: data.from,
@@ -693,35 +664,10 @@ socket.on('call_user', async (data) => {
             callType: data.callType,
             offer: data.offer
         });
-        console.log(`✅ Socket call sent to user ${data.to}`);
-    }
-    
-    // ВСЕГДА пытаемся отправить Push (даже если онлайн)
-    const subscription = pushSubscriptions.get(String(data.to));
-    if (subscription) {
-        try {
-            await webpush.sendNotification(subscription, JSON.stringify({
-                title: '📞 Входящий звонок',
-                body: `${data.fromName} звонит вам (${data.callType === 'video' ? 'видео' : 'аудио'})`,
-                callerId: data.from,
-                callerName: data.fromName,
-                callType: data.callType
-            }));
-            console.log(`📲 Push notification sent to user ${data.to}`);
-        } catch (error) {
-            console.error('❌ Push failed:', error);
-            // Удаляем невалидную подписку
-            if (error.statusCode === 410 || error.statusCode === 404) {
-                pushSubscriptions.delete(String(data.to));
-            }
-        }
+        console.log(`✅ Incoming call sent to user ${data.to}`);
     } else {
-        console.log(`ℹ️ No push subscription for user ${data.to}`);
-    }
-    
-    // Если получатель офлайн И нет push подписки — тогда говорим что офлайн
-    if (!receiverOnline && !subscription) {
         socket.emit('call_failed', { reason: 'user_offline' });
+        console.log(`❌ User ${data.to} is offline`);
     }
 });
 
