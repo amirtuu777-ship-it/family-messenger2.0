@@ -647,15 +647,17 @@ io.on('connection', (socket) => {
         // ========== WebRTC СИГНАЛЫ ДЛЯ ЗВОНКОВ ==========
 
     socket.on('call_user', (data) => {
-        console.log(`📞 Call from ${data.fromName} (${data.from}) to ${data.to}`);
+        console.log(`📞 Call from ${data.fromName} (${data.from}) to ${data.to}, type: ${data.callType}`);
         
         let receiverOnline = false;
         for (let [sockId, uid] of activeSockets.entries()) {
-            if (uid === data.to) {
+            if (uid == data.to) {
                 receiverOnline = true;
                 break;
             }
         }
+        
+        console.log(`Receiver ${data.to} online:`, receiverOnline);
         
         if (receiverOnline) {
             io.to(`user_${data.to}`).emit('incoming_call', {
@@ -682,6 +684,7 @@ io.on('connection', (socket) => {
     });
 
     socket.on('call_busy', (data) => {
+        console.log(`⚠️ User busy, notifying ${data.to}`);
         io.to(`user_${data.to}`).emit('call_busy');
     });
 
