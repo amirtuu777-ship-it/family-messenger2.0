@@ -392,6 +392,12 @@ socket.on('chat_deleted_by_other', (data) => {
     }
 });
 
+    // Инициализация обработчиков звонков
+    if (typeof setupCallHandlers === 'function') {
+        setupCallHandlers();
+        console.log('✅ Call handlers initialized');
+    }
+
 }
 
 function setupStatusUpdates() {
