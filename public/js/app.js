@@ -203,9 +203,6 @@ async function login() {
     if (response.ok) {
         currentUser = data.user;
         localStorage.setItem('shariq_user', JSON.stringify(currentUser));
-        
-        registerServiceWorker();
-        
         connectSocket();
         loadChats();
     } else {
@@ -394,11 +391,6 @@ socket.on('chat_deleted_by_other', (data) => {
         }
     }
 });
-    
-// Настройка обработчиков звонков
-if (typeof setupCallHandlers === 'function') {
-    setupCallHandlers();
-}
 
 }
 
